@@ -4,7 +4,7 @@
 This is a spark application that computes a set of metrics based on a collection of CDRS. The application has been built locally (on an apple machine) using standalone spark. The application consumes 2 CSV files (`cdrs.csv` and `cells.csv`) and outputs 1 CSV file (`results.csv`).
 
 ## How to build and run the application
-Since the application depends on the Spark API, there is an [sbt](https://www.scala-sbt.org/) condiguration file which explains that Spark is a dependency (please make sure to match it with your local installation of spark). 
+Since the application depends on the Spark API, there is a [sbt](https://www.scala-sbt.org/) configuration file which explains that Spark is a dependency (please make sure to match it with your local installation of spark). 
 
 For sbt to work correctly, we'll need to layout `RiaktrChallenge.scala` and `build.sbt` according to the typical directory structure. Once this is in place, we can create a JAR package containing the application's code, then use spark-submit to run the program.
 
