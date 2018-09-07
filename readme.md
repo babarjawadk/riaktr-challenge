@@ -6,7 +6,7 @@ This is a spark application that computes a set of metrics based on a collection
 ## How to build and run the application
 Since the application depends on the Spark API, there is an [sbt](https://www.scala-sbt.org/) condiguration file which explains that Spark is a dependency (please make sure to match it with your local installation of spark). 
 
-For sbt to work correctly, we'll need to layout `RiaktrChallenge.scala` and `build.sbt` according to the typical directory structure. Once this is in place, we can create a JAR package containing the application's code, then use spark-submit script to run the program.
+For sbt to work correctly, we'll need to layout `RiaktrChallenge.scala` and `build.sbt` according to the typical directory structure. Once this is in place, we can create a JAR package containing the application's code, then use spark-submit to run the program.
 
 Here are the detailed steps using bash:
 1. `cd <path to project containing build.sbt and src/main/scala/RiaktrChallenge.scala>`
