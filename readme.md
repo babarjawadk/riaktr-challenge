@@ -10,7 +10,7 @@ For sbt to work correctly, we'll need to layout `RiaktrChallenge.scala` and `bui
 
 Here are the detailed steps using bash:
 1. `cd <path to project containing build.sbt and src/main/scala/RiaktrChallenge.scala>`
-2. sbt package
+2. `sbt package`
 
 You can find more detailed info on self-contained applications [here](http://people.apache.org/~pwendell/spark-nightly/spark-master-docs/latest/quick-start.html#self-contained-applications) and on how to install spark locally [here](https://medium.com/luckspark/installing-spark-2-3-0-on-macos-high-sierra-276a127b8b85).
 
