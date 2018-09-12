@@ -38,7 +38,7 @@ object RiaktrChallenge {
     val numberDistinctCalls = cdr.count()
 
     // Number of dropped calls
-    val NumberDroppedCalls = cdr.filter($"dropped" === 1).count()
+    val numberDroppedCalls = cdr.filter($"dropped" === 1).count()
 
     // Total duration of the calls
     val totalDurationCalls = cdr.agg(sum("duration")).first.getDouble(0)
@@ -70,7 +70,7 @@ object RiaktrChallenge {
     Seq(
       (mostUsedCellId				 	 , "Most used cell (cell_id)"),
       (numberDistinctCalls			.toString, "Number of distinct calls"),
-      (NumberDroppedCalls			.toString, "Number of dropped calls"),
+      (numberDroppedCalls			.toString, "Number of dropped calls"),
       (totalDurationCalls			.toString, "Total call duration"),
       (totalDurationInternationalCalls	.toString, "Total call duration for international calls"),
       (averageDurationOnNetCalls		.toString, "Average duration on-net calls"),
