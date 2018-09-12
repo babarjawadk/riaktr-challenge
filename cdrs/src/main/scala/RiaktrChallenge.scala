@@ -1,16 +1,13 @@
 /* RiaktrChallenge.scala */
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.DataFrame
 
 object RiaktrChallenge {
   def main(args: Array[String]) {
     val spark = SparkSession.builder.appName("Riaktr Challenge").getOrCreate()
     
-    import spark.implicits._
-    
-     if (args.length != 3) {
-        println("Number of arguments needed: 3")
-    }
+    if (args.length != 3) println("Number of arguments needed: 3")
 
     val cdrPath = args(0)
     val cellPath = args(1)
@@ -20,12 +17,22 @@ object RiaktrChallenge {
     val cdr = spark.read.format("csv").option("header", "true").option("inferSchema", "true").load(cdrPath + "/cdrs.csv")
     val cell = spark.read.format("csv").option("header", "true").option("inferSchema", "true").load(cellPath + "/cells.csv")
 
-    // Caching
-    cdr.cache()
-    cell.cache()
+    // Creating output dataframe
+    val outputCSV = getMetrics(cdr, cell)
+
+    // Writing output dataframe to csv
+    writeDfToCSV(outputCSV, outputFilePath)
+    
+    spark.stop()
+  }
+
+
+  def getMetrics(cdr: DataFrame, cell: DataFrame): DataFrame = {
+    val spark = SparkSession.builder.getOrCreate()
+    import spark.implicits._
 
     // What is the most used cell?
-    val mostUsedCellId = cdr.groupBy("cell_id").count().sort($"count".desc).select($"cell_id".cast("string")).first.getString(0)
+    val mostUsedCellId = cdr.groupBy("cell_id").count().sort($"count".desc).select($"cell_id").first.getString(0)
 
     // Number of distinct calls
     val numberDistinctCalls = cdr.count()
@@ -34,18 +41,18 @@ object RiaktrChallenge {
     val NumberDroppedCalls = cdr.filter($"dropped" === 1).count()
 
     // Total duration of the calls
-    val totalDurationCalls = cdr.agg(sum("duration").cast("double")).first.getDouble(0)
+    val totalDurationCalls = cdr.agg(sum("duration")).first.getDouble(0)
 
     // Total duration of the international calls
-    val totalDurationInternationalCalls = cdr.filter($"type" === "international").agg(sum("duration").cast("double")).first.getDouble(0)
+    val totalDurationInternationalCalls = cdr.filter($"type" === "international").agg(sum("duration")).first.getDouble(0)
 
     // Average duration of the on-net calls
-    val averageDurationOnNetCalls = cdr.filter($"type" === "on-net").agg(mean("duration").cast("double")).first.getDouble(0)
+    val averageDurationOnNetCalls = cdr.filter($"type" === "on-net").agg(mean("duration")).first.getDouble(0)
 
     // Latitude and Longitude of the most used cell
     val r7 = cell.filter($"cell_id" === mostUsedCellId)
-    val latitudeMostUsedCell = cell.filter($"cell_id" === mostUsedCellId).select($"latitude".cast("double")).first.getDouble(0)
-    val longitudeMostUsedCell = cell.filter($"cell_id" === mostUsedCellId).select($"longitude".cast("double")).first.getDouble(0)
+    val latitudeMostUsedCell = cell.filter($"cell_id" === mostUsedCellId).select($"latitude").first.getDouble(0)
+    val longitudeMostUsedCell = cell.filter($"cell_id" === mostUsedCellId).select($"longitude").first.getDouble(0)
 
     // Number of calls that lasted <= 10 min
     val numberCallsLastingLessThanTenMin = cdr.filter($"duration" <= 10).count()
@@ -60,8 +67,8 @@ object RiaktrChallenge {
     val topThirdCalleeId = r10(2).getInt(0)
 
     // Creating output dataframe
-    val outputCSV = Seq(
-      (mostUsedCellId				.toString, "Most used cell (cell_id)"),
+    Seq(
+      (mostUsedCellId				 	 , "Most used cell (cell_id)"),
       (numberDistinctCalls			.toString, "Number of distinct calls"),
       (NumberDroppedCalls			.toString, "Number of dropped calls"),
       (totalDurationCalls			.toString, "Total call duration"),
@@ -75,8 +82,9 @@ object RiaktrChallenge {
       (topSecondCalleeId			.toString, "Top second callee id"),
       (topThirdCalleeId			.toString, "Top third callee id")
     ).toDF("Value", "Description")
+  }
 
-    // Writing output dataframe to csv
+  def writeDfToCSV(outputCSV: DataFrame, outputFilePath: String) = {
     val tmpPath = outputFilePath + "/tmpOutput"
 
     outputCSV.coalesce(1).write.option("header", "true").mode("overwrite").csv(tmpPath)
@@ -87,8 +95,6 @@ object RiaktrChallenge {
   
     tmpDir.listFiles.foreach(x => x.delete)
     tmpDir.delete
-    
-    spark.stop()
   }
 }
 
