@@ -2,6 +2,7 @@
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.expressions.Window
 
 object RiaktrChallenge {
   def main(args: Array[String]) {
@@ -14,8 +15,16 @@ object RiaktrChallenge {
     val outputFilePath = args(2)
 
     // Reading the data
-    val cdr = spark.read.format("csv").option("header", "true").option("inferSchema", "true").load(cdrPath + "/cdrs.csv")
-    val cell = spark.read.format("csv").option("header", "true").option("inferSchema", "true").load(cellPath + "/cells.csv")
+    val cdr = spark.read.
+      format("csv").
+      option("header", "true").
+      option("inferSchema", "true").
+      load(cdrPath + "/cdrs.csv")
+    val cell = spark.read.
+      format("csv").
+      option("header", "true").
+      option("inferSchema", "true").
+      load(cellPath + "/cells.csv")
 
     // Creating output dataframe
     val outputCSV = getMetrics(cdr, cell)
@@ -32,56 +41,90 @@ object RiaktrChallenge {
     import spark.implicits._
 
     // What is the most used cell?
-    val mostUsedCellId = cdr.groupBy("cell_id").count().sort($"count".desc).select($"cell_id").first.getString(0)
+    // + Number of distinct calls for most used cell 
+    // + latitude and longitude of the most used cell (question 1 & 7 & 9)
+    val q1q7q9 = cdr.
+      groupBy("caller_id", "cell_id").
+      agg(count(lit(1)) as "no_of_distinct_calls_most_used_cell").
+      withColumn("rnum", rank().over(Window.
+        partitionBy("caller_id").
+        orderBy($"no_of_distinct_calls_most_used_cell".desc, $"cell_id".desc))).
+      filter($"rnum" === 1).
+      drop("rnum").
+      join(cell, cdr("cell_id") === cell("cell_id"), "left").
+      drop("rnum").
+      drop(cell("cell_id")).
+      withColumnRenamed("cell_id", "most_used_cell").
+      withColumnRenamed("longitude", "longitude_most_used_cell").
+      withColumnRenamed("latitude", "latitude_most_used_cell")
 
-    // Number of distinct calls
-    val numberDistinctCalls = cdr.count()
+    // Number of distinct callees + Total duration of the calls (question 2 & 4)
+    val q2q4 = cdr.
+      groupBy("caller_id").
+      agg(countDistinct("callee_id") as "no_of_distinct_callees", 
+        sum("duration") as "total_duration").
+      withColumnRenamed("caller_id", "caller_id_q2q4")
 
-    // Number of dropped calls
-    val numberDroppedCalls = cdr.filter($"dropped" === 1).count()
+    // Number of dropped calls (question 3)
+    val q3 = cdr.
+      filter($"dropped" === 1).
+      groupBy("caller_id").
+      agg(count(lit(1)) as "no_of_dropped_calls").
+      withColumnRenamed("caller_id", "caller_id_q3")
 
-    // Total duration of the calls
-    val totalDurationCalls = cdr.agg(sum("duration")).first.getDouble(0)
+    // Total duration of the international calls (question 5)
+    val q5 = cdr.
+      filter($"type" === "international").
+      groupBy("caller_id").
+      agg(sum("duration") as "total_duration_international_calls").
+      withColumnRenamed("caller_id", "caller_id_q5")
 
-    // Total duration of the international calls
-    val totalDurationInternationalCalls = cdr.filter($"type" === "international").agg(sum("duration")).first.getDouble(0)
+    // Average duration of the on-net calls (question 6)
+    val q6 = cdr.
+      filter($"type" === "on-net").
+      groupBy("caller_id").
+      agg(mean("duration") as "average_duration_on_net_calls").
+      withColumnRenamed("caller_id", "caller_id_q6")
 
-    // Average duration of the on-net calls
-    val averageDurationOnNetCalls = cdr.filter($"type" === "on-net").agg(mean("duration")).first.getDouble(0)
+    // Number of calls that lasted <= 10 min (question 8)
+    val q8 = cdr.
+      filter($"duration" <= 10).
+      groupBy("caller_id").
+      agg(count(lit(1)) as "no_of_distinct_calls_lasting_less_than_10_min").
+      withColumnRenamed("caller_id", "caller_id_q8")
 
-    // Latitude and Longitude of the most used cell
-    val r7 = cell.filter($"cell_id" === mostUsedCellId)
-    val latitudeMostUsedCell = cell.filter($"cell_id" === mostUsedCellId).select($"latitude").first.getDouble(0)
-    val longitudeMostUsedCell = cell.filter($"cell_id" === mostUsedCellId).select($"longitude").first.getDouble(0)
+    // Top 3 callee ids (question 10)
+    val q10 = cdr.
+      groupBy("caller_id", "callee_id").
+      agg(count(lit(1)) as "no_of_distinct_calls").
+      withColumn("rnum", rank().over(Window.
+        partitionBy("caller_id").
+        orderBy($"no_of_distinct_calls".desc, $"callee_id".desc))).
+      withColumn("first_callee", when($"rnum" === 1, cdr("callee_id"))).
+      withColumn("second_callee", when($"rnum" === 2, cdr("callee_id"))).
+      withColumn("third_callee", when($"rnum" === 3, cdr("callee_id"))).
+      groupBy("caller_id").
+      agg(max("first_callee") as "first_callee", 
+        max("second_callee") as "second_callee", 
+        max("third_callee") as "third_callee").
+      withColumnRenamed("caller_id", "caller_id_q10")
 
-    // Number of calls that lasted <= 10 min
-    val numberCallsLastingLessThanTenMin = cdr.filter($"duration" <= 10).count()
-
-    // Number of calls relayed by the most used cell
-    val numberCallsRelayedByMostUsedCell = cdr.filter($"cell_id" === mostUsedCellId).count()
-
-    // Top 3 callee ids
-    val r10 = cdr.groupBy("callee_id").agg(sum("duration")).sort($"sum(duration)".desc).select("callee_id").head(3)
-    val topFirstCalleeId = r10(0).getInt(0)
-    val topSecondCalleeId = r10(1).getInt(0)
-    val topThirdCalleeId = r10(2).getInt(0)
-
-    // Creating output dataframe
-    Seq(
-      (mostUsedCellId				 	 , "Most used cell (cell_id)"),
-      (numberDistinctCalls			.toString, "Number of distinct calls"),
-      (numberDroppedCalls			.toString, "Number of dropped calls"),
-      (totalDurationCalls			.toString, "Total call duration"),
-      (totalDurationInternationalCalls	.toString, "Total call duration for international calls"),
-      (averageDurationOnNetCalls		.toString, "Average duration on-net calls"),
-      (latitudeMostUsedCell			.toString, "Latitude of the most used cell"),
-      (longitudeMostUsedCell			.toString, "Longitude of the most used cell"),
-      (numberCallsLastingLessThanTenMin	.toString, "Number of calls lasting less than 10 minutes (included)"),
-      (numberCallsRelayedByMostUsedCell	.toString, "Number of calls relayed by the most used cell"),
-      (topFirstCalleeId			.toString, "Top first callee id"),
-      (topSecondCalleeId			.toString, "Top second callee id"),
-      (topThirdCalleeId			.toString, "Top third callee id")
-    ).toDF("Value", "Description")
+    // Merging everything together
+    val outputCSV = q1q7q9.
+      join(q2q4, $"caller_id" === q2q4("caller_id_q2q4"), "left").
+      join(q3, $"caller_id" === q3("caller_id_q3"), "left").
+      join(q5, $"caller_id" === q5("caller_id_q5"), "left").
+      join(q6, $"caller_id" === q6("caller_id_q6"), "left").
+      join(q8, $"caller_id" === q8("caller_id_q8"), "left").
+      join(q10, $"caller_id" === q10("caller_id_q10"), "left").
+      drop("caller_id_q2q4").
+      drop("caller_id_q3").
+      drop("caller_id_q5").
+      drop("caller_id_q6").
+      drop("caller_id_q8").
+      drop("caller_id_q10")  
+    
+    outputCSV  
   }
 
   def writeDfToCSV(outputCSV: DataFrame, outputFilePath: String) = {
@@ -90,8 +133,12 @@ object RiaktrChallenge {
     outputCSV.coalesce(1).write.option("header", "true").mode("overwrite").csv(tmpPath)
 
     val tmpDir = new java.io.File(tmpPath)
-    val tmpCsvFilePath = tmpDir.listFiles.filter(x => x.toPath.toString.matches(tmpPath + "/part-00000.*"))(0).toString
-    (new java.io.File(tmpCsvFilePath)).renameTo(new java.io.File(outputFilePath + "/results.csv"))
+    val tmpCsvFilePath = tmpDir.
+      listFiles.
+      filter(x => x.toPath.toString.matches(tmpPath + "/part-00000.*"))(0).
+      toString
+    (new java.io.File(tmpCsvFilePath)).
+      renameTo(new java.io.File(outputFilePath + "/results.csv"))
   
     tmpDir.listFiles.foreach(x => x.delete)
     tmpDir.delete
