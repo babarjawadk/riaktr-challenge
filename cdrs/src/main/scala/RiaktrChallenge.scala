@@ -14,19 +14,11 @@ object RiaktrChallenge {
     val cellPath = args(1)
     val outputFilePath = args(2)
 
-    // Reading the data
-    val cdr = spark.read.
-      format("csv").
-      option("header", "true").
-      option("inferSchema", "true").
-      load(cdrPath + "/cdrs.csv")
-    val cell = spark.read.
-      format("csv").
-      option("header", "true").
-      option("inferSchema", "true").
-      load(cellPath + "/cells.csv")
+    // Reading data from csv
+    val cdr = readFromCsv(cdrPath + "/cdrs.csv")
+    val cell = readFromCsv(cellPath + "/cells.csv")
 
-    // Creating output dataframe
+    // Calculating metrics
     val outputCSV = getMetrics(cdr, cell)
 
     // Writing output dataframe to csv
@@ -35,6 +27,16 @@ object RiaktrChallenge {
     spark.stop()
   }
 
+
+  def readFromCsv(pathAndFileName: String): DataFrame = {
+    val spark = SparkSession.builder.getOrCreate()
+
+    spark.read.
+      format("csv").
+      option("header", "true").
+      option("inferSchema", "true").
+      load(pathAndFileName)
+  }
 
   def getMetrics(cdr: DataFrame, cell: DataFrame): DataFrame = {
     val spark = SparkSession.builder.getOrCreate()
@@ -144,4 +146,3 @@ object RiaktrChallenge {
     tmpDir.delete
   }
 }
-
